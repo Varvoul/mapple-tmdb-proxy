@@ -1,0 +1,69 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "cleanUrls": false,
+  "trailingSlash": false,
+  "functions": {
+    "api/hidden-gems/**/*.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/tv/airing.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/movies/current-year.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/**/*.js": {
+      "maxDuration": 30,
+      "memory": 512
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/api/hidden-gems/tv",
+      "dest": "/api/hidden-gems/tv.js"
+    },
+    {
+      "src": "/api/hidden-gems/movies",
+      "dest": "/api/hidden-gems/movies.js"
+    },
+    {
+      "src": "/api/tv/airing",
+      "dest": "/api/tv/airing.js"
+    },
+    {
+      "src": "/api/movies/current-year",
+      "dest": "/api/movies/current-year.js"
+    },
+    {
+      "src": "/api/details/movie/([^/]+)",
+      "dest": "/api/details/movie/[id].js?id=$1"
+    },
+    {
+      "src": "/api/details/tv/([^/]+)",
+      "dest": "/api/details/tv/[id].js?id=$1"
+    },
+    {
+      "src": "/api/tmdb(/.*)?",
+      "dest": "/api/tmdb/[...path].js"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, x-api-key" },
+        { "key": "Access-Control-Max-Age", "value": "86400" }
+      ]
+    }
+  ]
+}
