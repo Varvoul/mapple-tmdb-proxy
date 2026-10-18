@@ -37,6 +37,10 @@ import {
   handlePreflight,
 } from '../_lib/gems-helpers.js';
 
+// Short TTL for EMPTY result sets — prevents "poisoned" empty copies from
+// sticking in cache for hours during upstream outages.
+const EMPTY_TTL_MS = 5 * 60 * 1000;
+
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
 
@@ -89,18 +93,21 @@ export default async function handler(req, res) {
 
     cachedAt = new Date().toISOString();
 
+    const effTtl = filteredResults.length ? TTL_HIDDEN_GEMS : EMPTY_TTL_MS;
     setCache(cacheKey, {
       results: filteredResults,
       cached_at: cachedAt,
       upstream_pages_fetched: pagesFetched,
       source: 'discover/movie',
-    }, TTL_HIDDEN_GEMS);
+    }, effTtl);
   }
+
+  const effTtl = filteredResults.length ? TTL_HIDDEN_GEMS : EMPTY_TTL_MS;
 
   const sorted = sortResults(filteredResults, sortBy);
   const pageData = paginate(sorted, page);
 
-  setHeaders(res, cacheStatus, TTL_HIDDEN_GEMS);
+  setHeaders(res, cacheStatus, effTtl);
 
   return res.status(200).json({
     ...pageData,
@@ -115,6 +122,6 @@ export default async function handler(req, res) {
     upstream_pages_fetched: pagesFetched,
     max_upstream_pages: MAX_UPSTREAM_PAGES,
     cached_at: cachedAt,
-    cached_until: new Date(Date.now() + TTL_HIDDEN_GEMS).toISOString(),
+    cached_until: new Date(Date.now() + effTtl).toISOString(),
   });
 }

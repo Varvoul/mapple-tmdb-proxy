@@ -9,7 +9,7 @@
  *   5. Slice into 20-item pages on demand.
  */
 
-import { tmdbGet } from './mapple.js';
+import { tmdbFetch } from './provider.js';
 import {
   buildCacheKey,
   get as cacheGet,
@@ -122,7 +122,7 @@ export async function fetchUpstreamPages(path, baseQuery, language, shouldStopEa
     for (let p = start; p <= end; p++) {
       const query = { ...baseQuery, language, page: String(p) };
       batch.push(
-        tmdbGet(path, query)
+        tmdbFetch(path, query)
           .then((r) => {
             if (r && r.status === 200 && r.body) {
               if (r.body.total_pages) {

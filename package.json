@@ -1,7 +1,7 @@
 {
   "name": "mapple-tmdb-proxy",
-  "version": "1.0.0",
-  "description": "Vercel serverless proxy for mapple.fun TMDB API with auto-domain discovery, 2h TTL cache, and combined detail endpoints.",
+  "version": "1.1.0",
+  "description": "Vercel serverless proxy for mapple.fun TMDB API with auto-domain discovery, TMDB-direct fallback tier, 2h TTL cache, and combined detail endpoints.",
   "private": true,
   "type": "module",
   "engines": {

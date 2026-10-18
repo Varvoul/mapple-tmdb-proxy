@@ -60,6 +60,12 @@ import {
   handlePreflight,
 } from '../_lib/gems-helpers.js';
 
+// Short TTL for EMPTY result sets — prevents "poisoned" empty copies from
+// sticking in the in-memory/edge cache for hours when an upstream outage
+// briefly coincides with a cold cache (observed live during the Oct 2026
+// mapple outage: 200/empty responses cached for 12h).
+const EMPTY_TTL_MS = 5 * 60 * 1000;
+
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
 
@@ -122,14 +128,18 @@ export default async function handler(req, res) {
 
     cachedAt = new Date().toISOString();
 
-    // Cache the full filtered list (unsorted — sort happens at request time)
+    // Cache the full filtered list (unsorted — sort happens at request time).
+    // Empty sets get a short TTL so recovery is fast once upstream heals.
+    const effTtl = filteredResults.length ? TTL_HIDDEN_GEMS : EMPTY_TTL_MS;
     setCache(cacheKey, {
       results: filteredResults,
       cached_at: cachedAt,
       upstream_pages_fetched: pagesFetched,
       source: 'discover/tv',
-    }, TTL_HIDDEN_GEMS);
+    }, effTtl);
   }
+
+  const effTtl = filteredResults.length ? TTL_HIDDEN_GEMS : EMPTY_TTL_MS;
 
   // Sort the cached list according to the requested sort
   const sorted = sortResults(filteredResults, sortBy);
@@ -137,7 +147,7 @@ export default async function handler(req, res) {
   // Paginate
   const pageData = paginate(sorted, page);
 
-  setHeaders(res, cacheStatus, TTL_HIDDEN_GEMS);
+  setHeaders(res, cacheStatus, effTtl);
 
   return res.status(200).json({
     ...pageData,
@@ -152,6 +162,6 @@ export default async function handler(req, res) {
     upstream_pages_fetched: pagesFetched,
     max_upstream_pages: MAX_UPSTREAM_PAGES,
     cached_at: cachedAt,
-    cached_until: new Date(Date.now() + TTL_HIDDEN_GEMS).toISOString(),
+    cached_until: new Date(Date.now() + effTtl).toISOString(),
   });
 }

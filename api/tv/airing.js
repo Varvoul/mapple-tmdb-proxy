@@ -58,6 +58,10 @@ import {
   sleep,
 } from '../_lib/gems-helpers.js';
 
+// Short TTL for EMPTY result sets — prevents "poisoned" empty copies from
+// sticking in cache for hours during upstream outages.
+const EMPTY_TTL_MS = 5 * 60 * 1000;
+
 // For TV airing, we scan up to 20 upstream pages (400 items max).
 // After date filtering, this typically yields 50-150 items.
 // The spec allows "up to 50 pages" but 20 is sufficient for the date filter
@@ -194,6 +198,7 @@ export default async function handler(req, res) {
 
     cachedAt = new Date().toISOString();
 
+    const effTtl = filteredResults.length ? TTL_TV_AIRING : EMPTY_TTL_MS;
     setCache(cacheKey, {
       results: filteredResults,
       cached_at: cachedAt,
@@ -201,14 +206,16 @@ export default async function handler(req, res) {
       details_fetched: detailsFetched,
       date_range: dateRange,
       source: 'tv/on_the_air',
-    }, TTL_TV_AIRING);
+    }, effTtl);
   }
+
+  const effTtl = filteredResults.length ? TTL_TV_AIRING : EMPTY_TTL_MS;
 
   // Sort the cached list
   const sorted = sortResults(filteredResults, sortBy);
   const pageData = paginate(sorted, page);
 
-  setHeaders(res, cacheStatus, TTL_TV_AIRING);
+  setHeaders(res, cacheStatus, effTtl);
 
   return res.status(200).json({
     ...pageData,
@@ -222,6 +229,6 @@ export default async function handler(req, res) {
     details_fetched: detailsFetched,
     excluded_statuses: [...EXCLUDED_STATUSES],
     cached_at: cachedAt,
-    cached_until: new Date(Date.now() + TTL_TV_AIRING).toISOString(),
+    cached_until: new Date(Date.now() + effTtl).toISOString(),
   });
 }

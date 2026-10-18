@@ -51,6 +51,8 @@ let _tmdbKey = null;
 let _tmdbKeyExpiresAt = 0;
 let _lastDiscoveryAt = 0;
 let _discoveryPromise = null;
+let _lastFailAt = 0;   // last time discovery ran and found NOTHING (negative cache)
+let _lastError = null; // human-readable last discovery failure reason
 
 const DISCOVERY_COOLDOWN_MS = 60_000; // don't re-discover more than once/min
 const KEY_BUFFER_MS = 30_000;          // refresh key 30s before expiry
@@ -63,6 +65,12 @@ async function discoverDomain() {
   const now = Date.now();
   if (_currentDomain && now - _lastDiscoveryAt < DISCOVERY_COOLDOWN_MS) {
     return _currentDomain;
+  }
+  // Negative cache: while we have no domain and a failed probe happened less
+  // than a minute ago, fail fast instead of re-probing every bootstrap on
+  // every request (prevents discovery storms during upstream outages).
+  if (!_currentDomain && now - _lastFailAt < DISCOVERY_COOLDOWN_MS) {
+    return null;
   }
   if (_discoveryPromise) return _discoveryPromise;
 
@@ -95,6 +103,8 @@ async function discoverDomain() {
           _currentDomain = finalDomain;
           _cookieHeader = cookieStr;
           _lastDiscoveryAt = now;
+          _lastFailAt = 0;
+          _lastError = null;
 
           // Also try to parse the token response — but we mostly care about
           // the cookie + domain here, since /api/tmdb-key will give us the
@@ -113,6 +123,9 @@ async function discoverDomain() {
     } finally {
       _discoveryPromise = null;
     }
+    // Reached only when every bootstrap failed — arm the negative cache.
+    _lastFailAt = Date.now();
+    _lastError = 'all bootstrap domains failed (403 Cloudflare challenge / unreachable)';
     return null;
   })();
 
@@ -400,6 +413,7 @@ function getStatus() {
     keyExpiresAt: _tmdbKeyExpiresAt || null,
     keyExpiresIn: _tmdbKeyExpiresAt ? _tmdbKeyExpiresAt - Date.now() : null,
     lastDiscoveryAt: _lastDiscoveryAt || null,
+    lastError: _lastError,
     knownDomains: BOOTSTRAP_DOMAINS,
   };
 }

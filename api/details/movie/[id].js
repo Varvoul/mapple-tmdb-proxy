@@ -21,7 +21,7 @@
  *   - include_image_language (default en,null — English + no-language images)
  */
 
-import { tmdbGet } from '../../_lib/mapple.js';
+import { tmdbFetch } from '../../_lib/provider.js';
 import {
   buildCacheKey,
   get as cacheGet,
@@ -64,11 +64,13 @@ export default async function handler(req, res) {
     return res.status(cached.status).json(cached.value);
   }
 
-  // Fetch from mapple — single call returns everything inline
-  const upstream = await tmdbGet(`movie/${movieId}`, query);
+  // Fetch via provider resolver — mapple single call returns everything
+  // inline; the TMDB-direct fallback injects the equivalent append_to_response.
+  const upstream = await tmdbFetch(`movie/${movieId}`, query);
 
   if (upstream.status !== 200) {
     res.setHeader('X-Cache', 'ERROR');
+    res.setHeader('X-Upstream', upstream.provider || 'mapple');
     return res.status(upstream.status).json({
       error: 'Failed to fetch movie details',
       status: upstream.status,
@@ -77,6 +79,7 @@ export default async function handler(req, res) {
   }
 
   const m = upstream.body;
+  const servedBy = upstream.provider === 'mapple' ? 'mapple.fun -> TMDB' : 'TMDB direct (mapple unavailable)';
 
   // Re-shape into the requested combined response
   const combined = {
@@ -84,7 +87,7 @@ export default async function handler(req, res) {
     type: 'movie',
     cached_at: new Date().toISOString(),
     cached_until: new Date(Date.now() + TTL_MS).toISOString(),
-    source: 'mapple.fun -> TMDB',
+    source: servedBy,
     data: {
       // Core metadata
       metadata: {
@@ -171,6 +174,7 @@ export default async function handler(req, res) {
   cacheSet(cacheKey, combined, 200, 'application/json', TTL_MS);
 
   res.setHeader('X-Cache', 'MISS');
+  res.setHeader('X-Upstream', upstream.provider || 'mapple');
   res.setHeader('X-Cache-TTL', `${Math.floor(TTL_MS / 1000)}s`);
   Object.entries(edgeCacheHeaders(TTL_MS)).forEach(([k, v]) => res.setHeader(k, v));
   return res.status(200).json(combined);

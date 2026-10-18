@@ -6,6 +6,7 @@
  */
 
 import { getStatus, discoverDomain, refreshRequestToken } from './_lib/mapple.js';
+import { directEnabled } from './_lib/tmdb-direct.js';
 import { getStats } from './_lib/cache.js';
 
 export default async function handler(req, res) {
@@ -38,6 +39,14 @@ export default async function handler(req, res) {
   return res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
+    providers: {
+      serving_order: directEnabled() ? ['mapple', 'tmdb-direct'] : ['mapple'],
+      tmdb_direct: {
+        enabled: directEnabled(),
+        env_var: 'TMDB_BEARER',
+        note: 'Fallback tier — serves TMDB data directly when the mapple scrape tier is unavailable (e.g. Cloudflare bot-challenge on upstream).',
+      },
+    },
     mapple: {
       current_domain: domain,
       has_cookie: status.hasCookie,
@@ -48,6 +57,7 @@ export default async function handler(req, res) {
       last_discovery_at: status.lastDiscoveryAt
         ? new Date(status.lastDiscoveryAt).toISOString()
         : null,
+      last_error: status.lastError || null,
       known_domains: status.knownDomains,
     },
     cache: cacheStats,

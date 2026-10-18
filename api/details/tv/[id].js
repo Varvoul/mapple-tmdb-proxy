@@ -26,7 +26,7 @@
  *     richer season data.
  */
 
-import { tmdbGet } from '../../_lib/mapple.js';
+import { tmdbFetch } from '../../_lib/provider.js';
 import {
   buildCacheKey,
   get as cacheGet,
@@ -73,12 +73,14 @@ export default async function handler(req, res) {
     return res.status(cached.status).json(cached.value);
   }
 
-  // Fetch from mapple — single call returns core + credits + images + keywords
-  // + videos + reviews + translations + seasons inline
-  const upstream = await tmdbGet(`tv/${tvId}`, query);
+  // Fetch via provider resolver — mapple single call returns core + credits
+  // + images + keywords + videos + reviews + translations + seasons inline;
+  // the TMDB-direct fallback injects the equivalent append_to_response.
+  const upstream = await tmdbFetch(`tv/${tvId}`, query);
 
   if (upstream.status !== 200) {
     res.setHeader('X-Cache', 'ERROR');
+    res.setHeader('X-Upstream', upstream.provider || 'mapple');
     return res.status(upstream.status).json({
       error: 'Failed to fetch TV details',
       status: upstream.status,
@@ -87,6 +89,7 @@ export default async function handler(req, res) {
   }
 
   const t = upstream.body;
+  const servedBy = upstream.provider === 'mapple' ? 'mapple.fun -> TMDB' : 'TMDB direct (mapple unavailable)';
 
   // Optionally expand each season with full episode lists
   let seasonsExpanded = t.seasons || [];
@@ -100,7 +103,7 @@ export default async function handler(req, res) {
     for (const chunk of chunks) {
       const results = await Promise.all(
         chunk.map((s) =>
-          tmdbGet(`tv/${tvId}/season/${s.season_number}`, { language })
+          tmdbFetch(`tv/${tvId}/season/${s.season_number}`, { language })
             .then((r) => (r.status === 200 ? r.body : s))
             .catch(() => s)
         )
@@ -115,7 +118,7 @@ export default async function handler(req, res) {
     type: 'tv',
     cached_at: new Date().toISOString(),
     cached_until: new Date(Date.now() + TTL_MS).toISOString(),
-    source: 'mapple.fun -> TMDB',
+    source: servedBy,
     data: {
       // Core metadata
       metadata: {
@@ -213,6 +216,7 @@ export default async function handler(req, res) {
   cacheSet(cacheKey, combined, 200, 'application/json', TTL_MS);
 
   res.setHeader('X-Cache', 'MISS');
+  res.setHeader('X-Upstream', upstream.provider || 'mapple');
   res.setHeader('X-Cache-TTL', `${Math.floor(TTL_MS / 1000)}s`);
   Object.entries(edgeCacheHeaders(TTL_MS)).forEach(([k, v]) => res.setHeader(k, v));
   return res.status(200).json(combined);

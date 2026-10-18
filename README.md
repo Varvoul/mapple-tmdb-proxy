@@ -1,11 +1,12 @@
 # Mapple TMDB Proxy
 
-A Vercel serverless proxy for [mapple.fun](https://mapple.fun)'s TMDB API.
+A Vercel serverless proxy for [mapple.fun](https://mapple.fun)'s TMDB API, with a built-in TMDB-direct fallback tier so every endpoint keeps working even when the mapple upstream is unreachable.
 
 ## Features
 
 - **Auto-domain discovery** — Survives mapple domain rotations (mapplee.com → mapple.fun → next). The proxy bootstraps the current domain by following `mapplee.com`'s 301 redirect, and re-discovers on auth failure.
-- **2-hour TTL cache** — Cached per endpoint + per parameter set. Different params = fresh fetch. In-memory cache for warm invocations + Vercel edge cache via `Cache-Control: s-maxage=7200`.
+- **TMDB-direct fallback tier (v1.1+)** — When the mapple tier is unavailable (e.g. upstream turns on a Cloudflare bot-challenge that serverless IPs cannot pass), every endpoint transparently falls back to TMDB's official API using the `TMDB_BEARER` env var. Response shapes are identical, so consumers need zero changes. The mapple tier is always tried first and automatically resumes as primary once discovery succeeds again. Every response carries an `X-Upstream: mapple | tmdb-direct` header saying which tier served it.
+- **2-hour TTL cache** — Cached per endpoint + per parameter set. Different params = fresh fetch. In-memory cache for warm invocations + Vercel edge cache via `Cache-Control: s-maxage=7200`. Empty result sets are cached only 5 minutes (poisoned-empty-copy protection).
 - **Combined detail endpoints** — Get metadata + cast/crew + pictures + seasons + external IDs + statistics in one call.
 - **Full TMDB passthrough** — Generic `/api/tmdb/<path>` proxy supports every endpoint and parameter TMDB officially offers.
 
@@ -81,14 +82,20 @@ On 401, the proxy force-refreshes the key. If that fails, it re-discovers the do
 ## Deployment
 
 This project is configured for Vercel. Deploy via:
-1. Push to a Git repo and import on Vercel, OR
+1. Push to a Git repo and import on Vercel (the GitHub repo is linked to the Vercel project — pushes to `main` auto-deploy), OR
 2. Use `vercel` CLI: `vercel --prod`
 
-No environment variables needed — auth is fully anonymous.
+### Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `TMDB_BEARER` | Recommended | TMDB v4 read token (JWT, `api_read` scope). Enables the TMDB-direct fallback tier. Without it, the proxy 503s whenever the mapple tier is unavailable. |
+
+Set it in Vercel → Project → Settings → Environment Variables (all environments).
 
 ## Limitations
 
-Mapple.fun has an allowlist of endpoints it proxies. The following TMDB endpoints are NOT available:
+Mapple.fun has an allowlist of endpoints it proxies. The following TMDB endpoints are NOT available **on the mapple tier**:
 - `/tv/{id}/external_ids` (standalone) — but core `/tv/{id}` includes some external IDs inline
 - `/tv/{id}/aggregate_credits` — use `/tv/{id}/credits` instead
 - `/tv/{id}/content_ratings`
@@ -101,3 +108,5 @@ Mapple.fun has an allowlist of endpoints it proxies. The following TMDB endpoint
 - `/tv/{id}/season/{n}/credits|images|videos|external_ids`
 
 For movies, the core `/movie/{id}` endpoint includes most sub-resources (external_ids, keywords, recommendations, similar, videos, watch/providers, release_dates) inline by default — so the combined movie endpoint gets everything in one call.
+
+Note: the TMDB-direct fallback tier has **no allowlist** — it supports every official TMDB endpoint.

@@ -26,7 +26,8 @@
  *   Different params = different cache entry = fresh fetch.
  */
 
-import { tmdbGet, getStatus } from '../_lib/mapple.js';
+import { getStatus } from '../_lib/mapple.js';
+import { tmdbFetch } from '../_lib/provider.js';
 import {
   buildCacheKey,
   get as cacheGet,
@@ -137,11 +138,13 @@ export default async function handler(req, res) {
     }
   }
 
-  // Cache miss — fetch from mapple
-  const upstream = await tmdbGet(pathPart, query);
+  // Cache miss — fetch via provider resolver (mapple tier first, TMDB direct
+  // as fallback when the mapple tier is unavailable, e.g. Cloudflare block).
+  const upstream = await tmdbFetch(pathPart, query);
 
   if (upstream.status >= 500) {
     res.setHeader('X-Cache', 'ERROR');
+    res.setHeader('X-Upstream', upstream.provider || 'mapple');
     return res.status(upstream.status).json(upstream.body);
   }
 
@@ -152,6 +155,7 @@ export default async function handler(req, res) {
   }
 
   res.setHeader('X-Cache', 'MISS');
+  res.setHeader('X-Upstream', upstream.provider || 'mapple');
   res.setHeader('X-Cache-TTL', ttl > 0 ? `${Math.floor(ttl / 1000)}s` : '0');
   res.setHeader('Content-Type', upstream.headers.contentType || 'application/json');
   if (ttl > 0) {
